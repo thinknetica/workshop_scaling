@@ -12,81 +12,85 @@ services:
   # Это наше классическое Rails-приложение
   web:
     <<: *base
-    image: ruby:alpine
-    command: ['/bin/sh']
-    labels:
-      # Говорим что этот сервис нужно обслуживать нашим балансером - Traefik и конфигурируем его.
-      - "SERVICE_TAGS=traefik.enable=true,
-        traefik.http.routers.auth-edge.rule=Host(`web.example.com`),
-        traefik.http.routers.prod-web.tls=true,
-        traefik.http.routers.prod-web.entrypoints=websecure,
-        traefik.http.services.prod-web.loadbalancer.server.scheme=http,
-        monitoring"
-      - SERVICE_NAME=prod/web
-      # Настраиваем хелсчек который будет выполняться консулом
-      - SERVICE_CHECK_HTTP=/liveness
-      - SERVICE_CHECK_INTERVAL=15s
-      - SERVICE_CHECK_TIMEOUT=10s
-      - SERVICE_CHECK_DEREGISTER_AFTER=1m
-    ports:
-      - 80
+    image: ruby:local
+    working_dir: /home/app
+    command: ["puma", "-w", "${WORKERS-1}", "-t", "${THREADS-1}:${THREADS-1}", "-p", "3000"]
+    build:
+      dockerfile: Dockerfile.ruby
     volumes:
-      - ${PWD}/../../day1/streaming:/home/app
+      - ${PWD}/:/home/app
+    ports:
+      - 3000
+    environment: {}
+    labels:
+      # если использовать Docker Provider для Traefik
+      - "traefik.enable=true"
+      - "traefik.http.routers.rails.rule=Host(`rails.think`)"
+      - "traefik.http.routers.rails.entrypoints=web"
+      # если использовать Consul Catalog и регистрацию через consul registrator
+      - "SERVICE_NAME=think/rails-web"
+      - "SERVICE_TAGS=traefik.enable=true,\
+        traefik.http.routers.rails-web.rule=Host(`rails.think`),\
+        traefik.http.routers.rails-web.entrypoints=web,\
+        monitoring,monitoring_hostname=local"
       
 
-  # # Это background-worker, например DelayedJob или Sidekiq
-  # jobs:
-  #   <<: *base
-  #   image: docker.registry.example/project:${SERVICE_TAG-latest}
-  #   labels:
-  #     # Тут балансера уже нет, зато есть Прометей, который на том же консуле ищет с кого собирать метрики
-  #     - SERVICE_TAGS=monitoring
-  #     - SERVICE_NAME=prod/jobs
-  #     - SERVICE_CHECK_HTTP=/metrics
-  #     - SERVICE_CHECK_INTERVAL=15s
-  #     - SERVICE_CHECK_TIMEOUT=10s
-  #     - SERVICE_CHECK_DEREGISTER_AFTER=1m
-  #   ports:
-  #     - 80
-  #   healthcheck:
-  #     # Этот хелсчек нужен только для деплоя чтоб определить готовность сервиса и перейти к деплою следующего контейнера
-  #     test: ["CMD", "curl", "-f", "http://localhost:80/metrics"]
-  #     interval: 10s
-  #     timeout: 30s
-  #     retries: 3
-  #     start_period: 90s
-  #   volumes:
-  #     - type: tmpfs
-  #       target: /tmp
-  #       tmpfs:
-  #         size: 100000000
+  traefik:
+    <<: *base
+    image: traefik:latest
+    container_name: traefik
+    network_mode: host
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.consulcatalog.endpoint.address=localhost:8500"
+      - "--providers.consulcatalog.exposedbydefault=false"
+      - "--entryPoints.web.address=:80"
+      - "--log.level=debug"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
-  #   command: ['bundle', 'exec', '/home/app/docker/start_worker.sh']
+  consul:
+    <<: *base
+    image: consul:1.15
+    container_name: consul
+    network_mode: host
+    command: ["consul", "agent",
+      "-dev",
+      "-node", "${HOSTNAME}",
+      "-datacenter", "think",
+      "-bootstrap-expect", "0",
+      "-ui=true",
+      "-bind=0.0.0.0", "-client=0.0.0.0", "-advertise=${CURRENT_IP}",
+      "-log-level", "info"
+    ]
 
-  # # Это cron-like шедулер для периодических задач
-  # rufus:
-  #   <<: *base
-  #   image: docker.registry.example/project:${SERVICE_TAG-latest}
-  #   labels:
-  #     # Тут балансера уже нет, зато есть Прометей, который на том же консуле ищет с кого собирать метрики
-  #     - SERVICE_TAGS=monitoring
-  #     - SERVICE_NAME=prod/rufus
-  #     - SERVICE_CHECK_HTTP=/metrics
-  #     - SERVICE_CHECK_INTERVAL=15s
-  #     - SERVICE_CHECK_TIMEOUT=10s
-  #     - SERVICE_CHECK_DEREGISTER_AFTER=1m
-  #   ports:
-  #     - 80
-  #   healthcheck:
-  #     # Этот хелсчек нужен только для деплоя чтоб определить готовность сервиса и перейти к деплою следующего контейнера
-  #     test: ["CMD", "curl", "-f", "http://localhost:8080/metrics"]
-  #     interval: 10s
-  #     timeout: 30s
-  #     retries: 3
-  #     start_period: 90s
-  #   volumes:
-  #     - type: tmpfs
-  #       target: /tmp
-  #       tmpfs:
-  #         size: 100000000
-  #   command: ['bundle', 'exec', '/home/app/docker/start_rufus.sh']
+  registrator:
+    <<: *base
+    image: gliderlabs/registrator:master
+    network_mode: host
+    command: -ip ${CURRENT_IP} -cleanup -ttl 40 -ttl-refresh 30 -resync 60 consul://localhost:8500
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+
+
+  victoriametrics:
+    <<: *base
+    container_name: victoriametrics
+    image: victoriametrics/victoria-metrics:v1.85.3
+    command: ["-promscrape.config=/scrape.yml"]
+    ports:
+      - 8428:8428
+      - 8089:8089
+      - 8089:8089/udp
+      - 2003:2003
+      - 2003:2003/udp
+      - 4242:4242
+    volumes:
+      - "${PWD}/scrape.yml:/scrape.yml:ro"
+    labels:
+      - "SERVICE_8428_NAME=think/vmui"
+      - "SERVICE_8428_TAGS=traefik.enable=true,\
+        traefik.http.routers.vmui.rule=Host(`vmui.think`),\
+        traefik.http.routers.vmui.entrypoints=web"

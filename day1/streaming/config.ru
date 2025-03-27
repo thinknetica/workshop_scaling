@@ -19,7 +19,7 @@ class LogHelper < ::Logger
   end
 end
 
-$logger = LogHelper.new($stdout)
+$logger = ActiveSupport::TaggedLogging.new(LogHelper.new($stdout)).tagged("PID:#{Process.pid}")
 
 SUCCESS_RESPONSE = [
   'HTTP/1.1 200 OK',
@@ -40,21 +40,21 @@ class Application
     url = URI.parse(request.url)
 
     action, *args = url.path.gsub('//', '/').split('/').select(&:present?)
-    if action
+    if action.nil? || action.empty? || action == 'favicon.ico'
+      # logger.info 'Empty action. Skip'
+      [200, {}, ['{}']]
+    else
       logger.info "Processing #{action.inspect} with #{args.inspect}..."
       send(action, request, *args)
-    else
-      logger.info 'Empty action. Skip'
-      [200, {}, ['{}']]
     end
   rescue StandardError => e
     logger.exception('Server error:', e)
-    [500, {}, ["{\"success\":false,\"error\":\"Something wrong: #{e.inspect}\"}"]]
+    [500, {}, [render_string("Error: #{e.inspect}")]]
   end
 
   def sync_sleep(_request, seconds, *_args)
     sleep(seconds.to_f)
-    [200, {}, []]
+    [200, {}, [render_string("sleeping for #{seconds.to_f}")]]
   end
 
   # асинхронная обработка запроса - веб сервер отдаём сетевой сокет во владение самому приложению и забывает про него
@@ -80,7 +80,7 @@ class Application
     when :thin
       Thread.new(request.env['async.callback']) do |cb|
         sleep(seconds.to_f)
-        cb.call([200, {}, 'Thin thread sleep'])
+        cb.call([200, {}, render_string("Thin thread sleep: #{seconds.to_f}")])
       end
       # в Thin так вебсервер информируется об асинхронной обработке
       throw :async
@@ -88,7 +88,7 @@ class Application
       Thread.new(request.env['puma.socket']) do |socket|
         sleep(seconds.to_f)
         socket.write(SUCCESS_RESPONSE)
-        socket.write('Puma thread sleep')
+        socket.write(render_string("Puma thread sleep: #{seconds.to_f}"))
         socket.write("\n\n")
         socket.close
       end
@@ -98,7 +98,7 @@ class Application
       Thread.new(request.env['rack.hijack'].call) do |socket|
         sleep(seconds.to_f)
         socket.write(SUCCESS_RESPONSE)
-        socket.write('Passenger thread sleep')
+        socket.write(render_string('Passenger thread sleep'))
         socket.write("\n\n")
         socket.close
       end
@@ -106,11 +106,15 @@ class Application
       [-1, {}, []]
     else
       sleep(seconds.to_f)
-      [200, {}, ['No async sleep']]
+      [200, {}, [render_string('No async sleep')]]
     end
   end
 
   private
+
+  def render_string(msg)
+    "#{ENV['HOSTNAME']}[#{Process.pid}] #{Time.now}:#{msg}"
+  end
 
   def logger
     $logger
