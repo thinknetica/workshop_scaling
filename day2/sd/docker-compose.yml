@@ -1,0 +1,92 @@
+version: "3.7"
+
+x-base: &base
+  restart: unless-stopped
+  logging: 
+    options:
+      max-size: '50m'
+      max-file: '3'
+    driver: json-file
+
+services:
+  # Это наше классическое Rails-приложение
+  web:
+    <<: *base
+    image: ruby:alpine
+    command: ['/bin/sh']
+    labels:
+      # Говорим что этот сервис нужно обслуживать нашим балансером - Traefik и конфигурируем его.
+      - "SERVICE_TAGS=traefik.enable=true,
+        traefik.http.routers.auth-edge.rule=Host(`web.example.com`),
+        traefik.http.routers.prod-web.tls=true,
+        traefik.http.routers.prod-web.entrypoints=websecure,
+        traefik.http.services.prod-web.loadbalancer.server.scheme=http,
+        monitoring"
+      - SERVICE_NAME=prod/web
+      # Настраиваем хелсчек который будет выполняться консулом
+      - SERVICE_CHECK_HTTP=/liveness
+      - SERVICE_CHECK_INTERVAL=15s
+      - SERVICE_CHECK_TIMEOUT=10s
+      - SERVICE_CHECK_DEREGISTER_AFTER=1m
+    ports:
+      - 80
+    volumes:
+      - ${PWD}/../../day1/streaming:/home/app
+      
+
+  # # Это background-worker, например DelayedJob или Sidekiq
+  # jobs:
+  #   <<: *base
+  #   image: docker.registry.example/project:${SERVICE_TAG-latest}
+  #   labels:
+  #     # Тут балансера уже нет, зато есть Прометей, который на том же консуле ищет с кого собирать метрики
+  #     - SERVICE_TAGS=monitoring
+  #     - SERVICE_NAME=prod/jobs
+  #     - SERVICE_CHECK_HTTP=/metrics
+  #     - SERVICE_CHECK_INTERVAL=15s
+  #     - SERVICE_CHECK_TIMEOUT=10s
+  #     - SERVICE_CHECK_DEREGISTER_AFTER=1m
+  #   ports:
+  #     - 80
+  #   healthcheck:
+  #     # Этот хелсчек нужен только для деплоя чтоб определить готовность сервиса и перейти к деплою следующего контейнера
+  #     test: ["CMD", "curl", "-f", "http://localhost:80/metrics"]
+  #     interval: 10s
+  #     timeout: 30s
+  #     retries: 3
+  #     start_period: 90s
+  #   volumes:
+  #     - type: tmpfs
+  #       target: /tmp
+  #       tmpfs:
+  #         size: 100000000
+
+  #   command: ['bundle', 'exec', '/home/app/docker/start_worker.sh']
+
+  # # Это cron-like шедулер для периодических задач
+  # rufus:
+  #   <<: *base
+  #   image: docker.registry.example/project:${SERVICE_TAG-latest}
+  #   labels:
+  #     # Тут балансера уже нет, зато есть Прометей, который на том же консуле ищет с кого собирать метрики
+  #     - SERVICE_TAGS=monitoring
+  #     - SERVICE_NAME=prod/rufus
+  #     - SERVICE_CHECK_HTTP=/metrics
+  #     - SERVICE_CHECK_INTERVAL=15s
+  #     - SERVICE_CHECK_TIMEOUT=10s
+  #     - SERVICE_CHECK_DEREGISTER_AFTER=1m
+  #   ports:
+  #     - 80
+  #   healthcheck:
+  #     # Этот хелсчек нужен только для деплоя чтоб определить готовность сервиса и перейти к деплою следующего контейнера
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/metrics"]
+  #     interval: 10s
+  #     timeout: 30s
+  #     retries: 3
+  #     start_period: 90s
+  #   volumes:
+  #     - type: tmpfs
+  #       target: /tmp
+  #       tmpfs:
+  #         size: 100000000
+  #   command: ['bundle', 'exec', '/home/app/docker/start_rufus.sh']
