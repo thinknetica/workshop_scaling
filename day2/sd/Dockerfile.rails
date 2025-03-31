@@ -44,10 +44,11 @@ RUN set -ex \
 RUN mkdir -p /home/app
 RUN mkdir -p /home/bundle
 
-ADD Gemfile Gemfile.lock /home/bundle/
+ADD rails/Gemfile rails/Gemfile.lock /home/bundle/
 
 WORKDIR /home/app
 
 RUN set -ex \
   && cd /home/bundle \
   && bundle
+  

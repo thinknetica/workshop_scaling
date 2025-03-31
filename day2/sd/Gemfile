@@ -9,5 +9,7 @@ gem 'puma', require: false
 
 gem 'awesome_print'
 gem 'prometheus-client'
+gem 'diplomat'
+gem 'redis'
 
   

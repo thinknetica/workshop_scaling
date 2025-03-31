@@ -14,14 +14,18 @@ services:
     <<: *base
     image: ruby:local
     working_dir: /home/app
-    command: ["puma", "-w", "${WORKERS-1}", "-t", "${THREADS-1}:${THREADS-1}", "-p", "3000"]
+    #command: ["puma", "-w", "${WORKERS-1}", "-t", "${THREADS-1}:${THREADS-5}", "-p", "3000"]
+    command: ["bundle", "exec", "rails", "s", "-b", "0.0.0.0", "-p", "3000"]
     build:
-      dockerfile: Dockerfile.ruby
+      dockerfile: Dockerfile.rails
     volumes:
-      - ${PWD}/:/home/app
+      - ${PWD}/rails:/home/app
+    tmpfs:
+      - /home/app/tmp/pids
     ports:
       - 3000
-    environment: {}
+    environment:
+      CURRENT_IP: "${CURRENT_IP}"
     labels:
       # если использовать Docker Provider для Traefik
       - "traefik.enable=true"
@@ -40,14 +44,16 @@ services:
     image: traefik:latest
     container_name: traefik
     network_mode: host
+    environment:
+      CURRENT_IP: "${CURRENT_IP}"
     command:
       - "--api.insecure=true"
-      - "--providers.docker=true"
+      - "--providers.docker=false"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.consulcatalog.endpoint.address=localhost:8500"
+      - "--providers.consulcatalog.endpoint.address=${CURRENT_IP}:8500"
       - "--providers.consulcatalog.exposedbydefault=false"
       - "--entryPoints.web.address=:80"
-      - "--log.level=debug"
+      - "--log.level=warn"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
@@ -56,6 +62,8 @@ services:
     image: consul:1.15
     container_name: consul
     network_mode: host
+    environment:
+      CURRENT_IP: "${CURRENT_IP}"
     command: ["consul", "agent",
       "-dev",
       "-node", "${HOSTNAME}",
@@ -65,14 +73,28 @@ services:
       "-bind=0.0.0.0", "-client=0.0.0.0", "-advertise=${CURRENT_IP}",
       "-log-level", "info"
     ]
+    labels:
+      - "SERVICE_8500_NAME=think/consul"
+      - "SERVICE_8500_TAGS=traefik.enable=true,\
+        traefik.http.routers.consul.rule=Host(`consul.think`),\
+        traefik.http.routers.consul.entrypoints=web"
 
   registrator:
     <<: *base
     image: gliderlabs/registrator:master
     network_mode: host
-    command: -ip ${CURRENT_IP} -cleanup -ttl 40 -ttl-refresh 30 -resync 60 consul://localhost:8500
+    environment:
+      CURRENT_IP: "${CURRENT_IP}"
+    command: ["-ip", "${CURRENT_IP}", "-cleanup", "-ttl", "40", "-ttl-refresh", "30", "-resync", "60", "consul://${CURRENT_IP}:8500"]
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock:ro
+
+  redis:
+    <<: *base
+    image: redis
+    network_mode: host
+    depends_on:
+      - registrator
 
 
   victoriametrics:
@@ -94,3 +116,39 @@ services:
       - "SERVICE_8428_TAGS=traefik.enable=true,\
         traefik.http.routers.vmui.rule=Host(`vmui.think`),\
         traefik.http.routers.vmui.entrypoints=web"
+
+
+  # container.labels.com_docker_compose_service: web
+  victorialogs:
+    <<: *base
+    container_name: victorialogs
+    hostname: victorialogs
+    image: victoriametrics/victoria-logs
+    command:
+      - --storageDataPath=/vlogs
+      - --loggerFormat=json
+      - --envflag.enable=true        
+    ports:
+      - 9428:9428
+    volumes:
+      - "${PWD}/scrape.yml:/scrape.yml:ro"
+    labels:
+      - "SERVICE_9428_NAME=think/vmlogs"
+      - "SERVICE_9428_TAGS=traefik.enable=true,\
+        traefik.http.routers.vmlogs.rule=Host(`vmlogs.think`),\
+        traefik.http.routers.vmlogs.entrypoints=web"
+
+  
+  filebeat:
+    <<: *base
+    container_name: filebeat
+    user: root
+    image: elastic/filebeat:8.15.1
+    command: ["--strict.perms=false", "-d", "*"]
+    depends_on:
+      - victorialogs
+    volumes:
+      - "${PWD}/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro"
+      - "/var/lib/docker/containers:/var/lib/docker/containers"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
