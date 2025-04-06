@@ -2,18 +2,15 @@
 
 ## День 1
 
-### Практика
+### Практика (чеклист)
 
 - rails сервер на Puma/Passenger/Thin/Falcon
-- использование ab/siege
-
-- web-приложение
-- sleep / threads / workers
-- Puma / Passenger / Thin
+- web-приложение:
+  - sleep / threads / workers
+  - Puma / Passenger / Thin
 - Нагрузочное тестирование siege / ab
 - Action Cable 
 - Rack Hijack / throw :async
-
 
 ### ДЗ
 
