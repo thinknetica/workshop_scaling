@@ -1,6 +1,5 @@
 require 'json'
 require 'logger'
-require 'thread'
 
 require 'active_support/all'
 require 'awesome_print'
@@ -30,6 +29,7 @@ SUCCESS_RESPONSE = [
 ].join("\r\n").freeze
 
 # puma -t 1:1 -p 3000
+# PASSENGER_MAX_REQUEST_QUEUE_SIZE=1
 # passenger start --max-pool-size 1
 # thin start --threaded --threadpool-size 2
 class Application
@@ -98,7 +98,7 @@ class Application
       Thread.new(request.env['rack.hijack'].call) do |socket|
         sleep(seconds.to_f)
         socket.write(SUCCESS_RESPONSE)
-        socket.write(render_string('Passenger thread sleep'))
+        socket.write(render_string("Passenger thread sleep: #{seconds.to_f}"))
         socket.write("\n\n")
         socket.close
       end
@@ -110,7 +110,7 @@ class Application
     end
   end
 
-  private
+  # private
 
   def render_string(msg)
     "#{ENV['HOSTNAME']}[#{Process.pid}] #{Time.now}:#{msg}"

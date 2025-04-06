@@ -1,2 +1,2 @@
-http://localhost:3000/asyncsleep/1
+http://localhost:3000/sync_sleep/0
 
