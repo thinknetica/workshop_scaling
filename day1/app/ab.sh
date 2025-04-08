@@ -1,6 +1,6 @@
 #!/bin/bash
 
-exec ab -n 100000 -c 50 http://localhost:3000/sync_sleep/0
+exec ab -n 50000 -c 100 "http://localhost:3000/sync_sleep/0?a=1111111111111111111111111111111111111111111111111111111"
 
 
 

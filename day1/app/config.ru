@@ -1,5 +1,6 @@
 require 'json'
 require 'logger'
+require 'get_process_mem'
 
 require 'active_support/all'
 require 'awesome_print'
@@ -50,6 +51,12 @@ class Application
   rescue StandardError => e
     logger.exception('Server error:', e)
     [500, {}, [render_string("Error: #{e.inspect}")]]
+  end
+
+  def mem(request, *args)
+    bytes = GetProcessMem.new.bytes
+    puts "MEM:#{bytes / 1024 / 1024}"
+    [200, {}, [render_string("current memory for #{bytes / 1024 / 1024}")]]
   end
 
   def sync_sleep(_request, seconds, *_args)
@@ -110,7 +117,7 @@ class Application
     end
   end
 
-  # private
+  private
 
   def render_string(msg)
     "#{ENV['HOSTNAME']}[#{Process.pid}] #{Time.now}:#{msg}"
