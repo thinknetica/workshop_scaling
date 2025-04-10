@@ -22,6 +22,7 @@ require 'prometheus/middleware/exporter'
 Bundler.require(*Rails.groups)
 
 module Think
+
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 7.2

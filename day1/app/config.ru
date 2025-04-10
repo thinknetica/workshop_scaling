@@ -23,16 +23,16 @@ $logger = ActiveSupport::TaggedLogging.new(LogHelper.new($stdout)).tagged("PID:#
 
 SUCCESS_RESPONSE = [
   'HTTP/1.1 200 OK',
-  'Connection: Keep-Alive',
+  'Connection: Keep-Alive',   
   'Content-Type: application/json',
   '',
   ''
 ].join("\r\n").freeze
 
-# puma -t 1:1 -p 3000
-# PASSENGER_MAX_REQUEST_QUEUE_SIZE=1
-# passenger start --max-pool-size 1
-# thin start --threaded --threadpool-size 2
+  # puma -t 1:1 -p 3000
+  # PASSENGER_MAX_REQUEST_QUEUE_SIZE=1
+  # passenger start --max-pool-size 1
+  # thin start --threaded --threadpool-size 2
 class Application
   def initialize(*args); end
 

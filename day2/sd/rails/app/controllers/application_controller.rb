@@ -21,6 +21,16 @@ class ApplicationController < ActionController::Base
 
   private
 
+  helper_method :identifier
+  def identifier
+    $identifier ||= "#{ENV['HOSTNAME']}_#{Time.now.to_i}"
+  end
+
+  helper_method :pid
+  def pid
+    Process.pid.to_s
+  end
+
   helper_method :leader_identifier
   def leader_identifier
     cache.read('think:rails:leader')
@@ -36,15 +46,6 @@ class ApplicationController < ActionController::Base
     leader_identifier == identifier
   end
 
-  helper_method :identifier
-  def identifier
-    $identifier ||= "#{ENV['HOSTNAME']}_#{Time.now.to_i}"
-  end
-
-  helper_method :pid
-  def pid
-    Process.pid.to_s
-  end
 
   def redis
     @redis ||= Redis.new(host: $current_ip)

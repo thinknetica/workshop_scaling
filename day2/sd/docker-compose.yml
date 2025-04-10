@@ -12,7 +12,7 @@ services:
   # Это наше классическое Rails-приложение
   web:
     <<: *base
-    image: ruby:local
+    image: rails:local
     working_dir: /home/app
     #command: ["puma", "-w", "${WORKERS-1}", "-t", "${THREADS-1}:${THREADS-5}", "-p", "3000"]
     command: ["bundle", "exec", "rails", "s", "-b", "0.0.0.0", "-p", "3000"]
@@ -22,15 +22,16 @@ services:
       - ${PWD}/rails:/home/app
     tmpfs:
       - /home/app/tmp/pids
+      - /tmp
     ports:
       - 3000
     environment:
       CURRENT_IP: "${CURRENT_IP}"
     labels:
       # если использовать Docker Provider для Traefik
-      - "traefik.enable=true"
-      - "traefik.http.routers.rails.rule=Host(`rails.think`)"
-      - "traefik.http.routers.rails.entrypoints=web"
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.rails.rule=Host(`rails.think`)"
+      # - "traefik.http.routers.rails.entrypoints=web"
       # если использовать Consul Catalog и регистрацию через consul registrator
       - "SERVICE_NAME=think/rails-web"
       - "SERVICE_TAGS=traefik.enable=true,\
@@ -48,14 +49,22 @@ services:
       CURRENT_IP: "${CURRENT_IP}"
     command:
       - "--api.insecure=true"
-      - "--providers.docker=false"
-      - "--providers.docker.exposedbydefault=false"
+      # - "--providers.docker=true"
+      # - "--providers.docker.exposedbydefault=false"
       - "--providers.consulcatalog.endpoint.address=${CURRENT_IP}:8500"
       - "--providers.consulcatalog.exposedbydefault=false"
       - "--entryPoints.web.address=:80"
       - "--log.level=warn"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    ports:
+      - 8080
+    labels:
+      - "SERVICE_8080_NAME=think/traefik"
+      - "SERVICE_8080_TAGS=traefik.enable=true,\
+        traefik.http.routers.traefik.rule=Host(`traefik.think`),\
+        traefik.http.routers.traefik.entrypoints=web"
+      - "SERVICE_80_IGNORE=1"
 
   consul:
     <<: *base
@@ -78,6 +87,11 @@ services:
       - "SERVICE_8500_TAGS=traefik.enable=true,\
         traefik.http.routers.consul.rule=Host(`consul.think`),\
         traefik.http.routers.consul.entrypoints=web"
+      - "SERVICE_8300_IGNORE=1"
+      - "SERVICE_8301_IGNORE=1"
+      - "SERVICE_8302_IGNORE=1"
+      - "SERVICE_8600_IGNORE=1"
+
 
   registrator:
     <<: *base
@@ -97,6 +111,7 @@ services:
       - registrator
 
 
+  # histogram_quantile(9.9, sum(rate(http_server_request_duration_seconds_bucket[30s])) by (le))
   victoriametrics:
     <<: *base
     container_name: victoriametrics
@@ -118,7 +133,7 @@ services:
         traefik.http.routers.vmui.entrypoints=web"
 
 
-  # container.labels.com_docker_compose_service: web
+  # QUERY: container.labels.com_docker_compose_service: web
   victorialogs:
     <<: *base
     container_name: victorialogs
@@ -130,8 +145,6 @@ services:
       - --envflag.enable=true        
     ports:
       - 9428:9428
-    volumes:
-      - "${PWD}/scrape.yml:/scrape.yml:ro"
     labels:
       - "SERVICE_9428_NAME=think/vmlogs"
       - "SERVICE_9428_TAGS=traefik.enable=true,\
