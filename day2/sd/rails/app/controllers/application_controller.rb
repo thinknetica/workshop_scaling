@@ -6,6 +6,7 @@ class ApplicationController < ActionController::Base
   def info; end
 
   def cluster *_args
+  
     all = Diplomat::Health.service('think/rails-web', passing: true).map do |meta|
       id = meta.dig(:Service, 'ID')
       ip = meta.dig(:Service, 'Address')
@@ -15,7 +16,7 @@ class ApplicationController < ActionController::Base
 
     @infos = all.shuffle.map do |(id, ip, port)|
       info = Net::HTTP.get(URI("http://#{ip}:#{port}/info"))
-      [id, ip, port, info]
+      [id, ip, port, info]              
     end.sort
   end
 

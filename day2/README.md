@@ -6,7 +6,7 @@ Service Discovery, балансировка, observability
 
 ### Практика (чеклист)
 
-- скейлинг / порты
+- скейлинг / порты  
   - trafik и docker provider
   - consul и consul registrator
   - traefik и consul provider

@@ -27,11 +27,11 @@ services:
       - 3000
     environment:
       CURRENT_IP: "${CURRENT_IP}"
-    labels:
+    labels:         
       # если использовать Docker Provider для Traefik
       # - "traefik.enable=true"
-      # - "traefik.http.routers.rails.rule=Host(`rails.think`)"
-      # - "traefik.http.routers.rails.entrypoints=web"
+      # - "traefik.http.routers.rails_web.rule=Host(`rails.think`)"
+      # - "traefik.http.routers.rails_web .entrypoints=web"
       # если использовать Consul Catalog и регистрацию через consul registrator
       - "SERVICE_NAME=think/rails-web"
       - "SERVICE_TAGS=traefik.enable=true,\
@@ -54,9 +54,10 @@ services:
       - "--providers.consulcatalog.endpoint.address=${CURRENT_IP}:8500"
       - "--providers.consulcatalog.exposedbydefault=false"
       - "--entryPoints.web.address=:80"
+      - "--metrics.prometheus.addEntryPointsLabels=true"  
       - "--log.level=warn"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    # volumes:
+    #   - "/var/run/docker.sock:/var/run/docker.sock:ro"
     ports:
       - 8080
     labels:
@@ -76,8 +77,8 @@ services:
     command: ["consul", "agent",
       "-dev",
       "-node", "${HOSTNAME}",
-      "-datacenter", "think",
-      "-bootstrap-expect", "0",
+      "-datacenter", "think", 
+      "-bootstrap-expect", "0",   
       "-ui=true",
       "-bind=0.0.0.0", "-client=0.0.0.0", "-advertise=${CURRENT_IP}",
       "-log-level", "info"
@@ -88,25 +89,25 @@ services:
         traefik.http.routers.consul.rule=Host(`consul.think`),\
         traefik.http.routers.consul.entrypoints=web"
       - "SERVICE_8300_IGNORE=1"
-      - "SERVICE_8301_IGNORE=1"
+      - "SERVICE_8301_IGNORE=1" 
       - "SERVICE_8302_IGNORE=1"
       - "SERVICE_8600_IGNORE=1"
 
-
+  
   registrator:
     <<: *base
     image: gliderlabs/registrator:master
     network_mode: host
     environment:
       CURRENT_IP: "${CURRENT_IP}"
-    command: ["-ip", "${CURRENT_IP}", "-cleanup", "-ttl", "40", "-ttl-refresh", "30", "-resync", "60", "consul://${CURRENT_IP}:8500"]
+    command: ["-ip", "${CURRENT_IP}", "-cleanup", "-ttl", "40", "-ttl-refresh", "30", "-resync", "30", "consul://${CURRENT_IP}:8500"]
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock:ro
 
   redis:
     <<: *base
     image: redis
-    network_mode: host
+    network_mode: host  
     depends_on:
       - registrator
 
@@ -133,7 +134,7 @@ services:
         traefik.http.routers.vmui.entrypoints=web"
 
 
-  # QUERY: container.labels.com_docker_compose_service: web
+  # # QUERY: container.labels.com_docker_compose_service: web
   victorialogs:
     <<: *base
     container_name: victorialogs

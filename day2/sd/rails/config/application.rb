@@ -21,7 +21,16 @@ require 'prometheus/middleware/exporter'
 # you've limited to :test, :development, or :production.
 Bundler.require(*Rails.groups)
 
-module Think
+module Think  
+
+  class MyExporter < Prometheus::Middleware::Exporter
+    def respond_with(*args)
+      ActiveSupport::Notifications.instrument('metrics.before_scrape')
+      # sleep(1.0 / (3 + rand(10)))
+      super
+    end
+  end
+
 
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
@@ -44,6 +53,6 @@ module Think
     config.generators.system_tests = nil
 
     config.middleware.use Prometheus::Middleware::Collector
-    config.middleware.use Prometheus::Middleware::Exporter
+    config.middleware.use MyExporter
   end
 end
