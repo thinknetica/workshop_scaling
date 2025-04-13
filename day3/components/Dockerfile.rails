@@ -1,0 +1,55 @@
+ARG BASE_RUBY=3.2
+ARG BASE_ALPINE=alpine3.16
+
+ARG BASE_IMAGE=ruby:${BASE_RUBY}-${BASE_ALPINE}
+
+FROM ${BASE_IMAGE}
+
+RUN apk update
+
+RUN set -ex \
+  && apk add ca-certificates curl wget 
+
+RUN set -ex \
+  && apk add \
+    autoconf \
+    bison \
+    bzip2 \
+    bzip2-dev \
+    ca-certificates \
+    coreutils \
+    curl-dev \
+    dpkg-dev dpkg \
+    g++ \
+    gcc \
+    gdbm-dev \
+    git \
+    glib-dev \
+    libc-dev \
+    libffi-dev \
+    postgresql-dev \
+    linux-headers \
+    make \
+    ncurses-dev \
+    procps \
+    readline-dev
+
+RUN set -ex \
+  && apk add \
+    tar \
+    xz \
+    yaml-dev \
+    zlib-dev \
+    shared-mime-info
+
+RUN mkdir -p /home/app
+RUN mkdir -p /home/bundle
+
+ADD rails/Gemfile rails/Gemfile.lock /home/bundle/
+
+WORKDIR /home/app
+
+RUN set -ex \
+  && cd /home/bundle \
+  && bundle
+  

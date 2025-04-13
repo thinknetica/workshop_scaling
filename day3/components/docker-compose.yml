@@ -1,0 +1,247 @@
+version: "3.7"
+
+x-base: &base
+  restart: always
+  logging: 
+    options:
+      max-size: '50m'
+      max-file: '3'
+    driver: json-file
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+
+  # Это наше классическое Rails-приложение
+  web:
+    <<: *base
+    image: rails:local
+    working_dir: /home/app
+    #command: ["puma", "-w", "${WORKERS-1}", "-t", "${THREADS-1}:${THREADS-5}", "-p", "3000"]
+    command: ["bundle", "exec", "/bin/sh", "-c", "rails db:create && rails db:migrate && exec rails s -b 0.0.0.0 -p 3000"]
+    depends_on:
+      - postgres
+      - traefik
+    build:
+      dockerfile: Dockerfile.rails
+    volumes:
+      - ${PWD}/rails:/home/app
+    tmpfs:
+      - /home/app/tmp/pids
+      - /tmp
+    ports:
+      - 3000
+    environment:
+      CURRENT_IP: "${CURRENT_IP}"
+      DATABASE_HOST: postgres
+    labels:         
+      # если использовать Docker Provider для Traefik
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.rails_web.rule=Host(`rails.think`)"
+      # - "traefik.http.routers.rails_web .entrypoints=web"
+      # если использовать Consul Catalog и регистрацию через consul registrator
+      - "SERVICE_NAME=think/rails-web"
+      - "SERVICE_TAGS=traefik.enable=true,\
+        traefik.http.routers.rails-web.rule=Host(`rails.think`),\
+        traefik.http.routers.rails-web.entrypoints=web,\
+        monitoring,monitoring_hostname=local"
+      
+  scheduler:
+    extends: web
+    command: ["bundle", "exec", "rails", "r", "./scheduler.rb"]
+    depends_on:
+      - web
+      - redis
+    labels:
+      - "SERVICE_NAME=think/rails-scheduler"
+      - "SERVICE_TAGS=monitoring,monitoring_hostname=local"
+
+  jobs-sidekiq:
+    extends: web
+    command: ["bundle", "exec", "rails", "r", "./jobs_sidekiq.rb"]
+    ports: [3001]
+    depends_on:
+      - web
+      - redis
+    labels:
+      - "SERVICE_3000_IGNORE=1"
+      - "SERVICE_NAME=think/rails-jobs-sidekiq"
+      - "SERVICE_TAGS=monitoring,monitoring_hostname=local"
+    
+  jobs-delayed-jobs:
+    extends: web
+    command: ["bundle", "exec", "rails", "r", "./jobs_dj.rb"]
+    ports: [3001]
+    depends_on:
+      - web
+      - redis
+    labels:
+      - "SERVICE_3000_IGNORE=1"
+      - "SERVICE_NAME=think/rails-jobs-dj"
+      - "SERVICE_TAGS=monitoring,monitoring_hostname=local"
+
+  redis-listener:
+    extends: web
+    command: ["bundle", "exec", "rails", "r", "./redis_listerner.rb"]
+    ports: [3001]
+    depends_on:
+      - web
+      - redis
+      - jobs-delayed-jobs
+    labels:
+      - "SERVICE_3000_IGNORE=1"
+      - "SERVICE_NAME=think/rails-redis-listener"
+      - "SERVICE_TAGS=monitoring,monitoring_hostname=local"
+
+  # Это наше классическое Rails-приложение
+  web-heavy:
+    <<: *base
+    extends: web
+    depends_on:
+      - web
+    labels:         
+      - "SERVICE_NAME=think/rails-web-heavy"
+      - "SERVICE_TAGS=traefik.enable=true,\
+        traefik.http.routers.rails-HEAVY.rule=Host(`rails.think`) && PathPrefix(`/heavy_request`),\
+        traefik.http.routers.rails-HEAVY.entrypoints=web,\
+        monitoring,monitoring_hostname=local"
+
+  traefik:
+    <<: *base
+    image: traefik:latest
+    container_name: traefik
+    network_mode: host
+    environment:
+      CURRENT_IP: "${CURRENT_IP}"
+    command:
+      - "--api.insecure=true"
+      # - "--providers.docker=true"
+      # - "--providers.docker.exposedbydefault=false"
+      - "--providers.consulcatalog.endpoint.address=${CURRENT_IP}:8500"
+      - "--providers.consulcatalog.exposedbydefault=false"
+      - "--entryPoints.web.address=:80"
+      - "--metrics.prometheus.addEntryPointsLabels=true"  
+      - "--log.level=warn"
+    # volumes:
+    #   - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    depends_on:
+      - registrator
+    ports:
+      - 8080
+    labels:
+      - "SERVICE_8080_NAME=think/traefik"
+      - "SERVICE_8080_TAGS=traefik.enable=true,\
+        traefik.http.routers.traefik.rule=Host(`traefik.think`),\
+        traefik.http.routers.traefik.entrypoints=web"
+      - "SERVICE_80_IGNORE=1"
+
+  consul:
+    <<: *base
+    image: consul:1.15
+    container_name: consul
+    network_mode: host
+    environment:
+      CURRENT_IP: "${CURRENT_IP}"
+    command: ["consul", "agent",
+      "-dev",
+      "-node", "${HOSTNAME}",
+      "-datacenter", "think", 
+      "-bootstrap-expect", "0",   
+      "-ui=true",
+      "-bind=0.0.0.0", "-client=0.0.0.0", "-advertise=${CURRENT_IP}",
+      "-log-level", "info"
+    ]
+    labels:
+      - "SERVICE_8500_NAME=think/consul"
+      - "SERVICE_8500_TAGS=traefik.enable=true,\
+        traefik.http.routers.consul.rule=Host(`consul.think`),\
+        traefik.http.routers.consul.entrypoints=web"
+      - "SERVICE_8300_IGNORE=1"
+      - "SERVICE_8301_IGNORE=1" 
+      - "SERVICE_8302_IGNORE=1"
+      - "SERVICE_8600_IGNORE=1"
+
+  
+  registrator:
+    <<: *base
+    image: gliderlabs/registrator:master
+    network_mode: host
+    environment:
+      CURRENT_IP: "${CURRENT_IP}"
+    command: ["-ip", "${CURRENT_IP}", "-cleanup", "-ttl", "20", "-ttl-refresh", "10", "-resync", "10", "consul://${CURRENT_IP}:8500"]
+    depends_on:
+      - consul
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+
+  redis:
+    <<: *base
+    image: redis
+    network_mode: host  
+    depends_on:
+      - registrator
+
+
+  # histogram_quantile(9.9, sum(rate(http_server_request_duration_seconds_bucket[30s])) by (le))
+  victoriametrics:
+    <<: *base
+    container_name: victoriametrics
+    image: victoriametrics/victoria-metrics:v1.85.3
+    command: ["-promscrape.config=/scrape.yml"]
+    depends_on:
+      - registrator
+      - traefik
+    ports:
+      - 8428:8428
+      - 8089:8089
+      - 8089:8089/udp
+      - 2003:2003
+      - 2003:2003/udp
+      - 4242:4242
+    volumes:
+      - "${PWD}/scrape.yml:/scrape.yml:ro"
+    labels:
+      - "SERVICE_8428_NAME=think/vmui"
+      - "SERVICE_8428_TAGS=traefik.enable=true,\
+        traefik.http.routers.vmui.rule=Host(`vmui.think`),\
+        traefik.http.routers.vmui.entrypoints=web"
+
+
+  # # QUERY: container.labels.com_docker_compose_service: web
+  victorialogs:
+    <<: *base
+    container_name: victorialogs
+    hostname: victorialogs
+    image: victoriametrics/victoria-logs
+    command:
+      - --storageDataPath=/vlogs
+      - --loggerFormat=json
+      - --envflag.enable=true        
+    depends_on:
+      - registrator
+      - traefik
+    ports:
+      - 9428:9428
+    labels:
+      - "SERVICE_9428_NAME=think/vmlogs"
+      - "SERVICE_9428_TAGS=traefik.enable=true,\
+        traefik.http.routers.vmlogs.rule=Host(`vmlogs.think`),\
+        traefik.http.routers.vmlogs.entrypoints=web"
+
+  
+  filebeat:
+    <<: *base
+    container_name: filebeat
+    user: root
+    image: elastic/filebeat:8.15.1
+    command: ["--strict.perms=false", "-d", "*"]
+    depends_on:
+      - victorialogs
+    volumes:
+      - "${PWD}/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro"
+      - "/var/lib/docker/containers:/var/lib/docker/containers"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+

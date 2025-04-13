@@ -1,0 +1,4 @@
+Cluster info:
+<% @infos.each do |(id, ip, port, info)|%>
+  <%= "    * #{id}[#{ip}:#{port}] -> #{info}\n" %>
+<% end %>
