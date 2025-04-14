@@ -47,9 +47,8 @@ class ApplicationController < ActionController::Base
     leader_identifier == identifier
   end
 
-
   def redis
-    @redis ||= Redis.new(host: $current_ip)
+    @redis ||= Redis.new(host: '127.0.0.1')
   end
 
   def cache
