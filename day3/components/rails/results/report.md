@@ -21,3 +21,16 @@
 *[ActiveJob] [DataHandlerJob] [87602116-9b82-4fca-a8b6-2a075d4cbbd3] Performed DataHandlerJob (Job ID: ...*
 
 - Все 4 файла обработались, т.е. их статус стал ОБРАТБОТАННЫЕ (proccessed) (в DataHandlerJob берется пачка по 3 файла)
+
+## Пункт 4.
+- Создал задачу по удалению обработанных данных DataDeleteJob. Удаляю данные, делая блокировку на процесс с помощью with_advisory_lock.
+- Запускаю rails r ./scheduler.rb и смотрю логи:
+
+*[2025-04-15T22:16:44.623952 #34837]  INFO -- : [ActiveJob] [DataDeleteJob] [37b73118-cce1-4049-ab91-475bd8fe7bc8] Deleted 4 files*
+*[ActiveJob] [DataDeleteJob] [37b73118-cce1-4049-ab91-475bd8fe7bc8] Performed DataDeleteJob (Job ID: ...*
+*[ActiveJob] Enqueued TestSchedulerJob (Job ID: 5a469095-3f3d-4f0e-ab51-f28a9ef19334) to DelayedJob(default)*
+*...*
+*[ActiveJob] [DataDeleteJob] [ef975175-a31b-4809-b715-2ed02fce92d7] No files to delete*
+*[ActiveJob] [DataDeleteJob] [ef975175-a31b-4809-b715-2ed02fce92d7] Performed DataDeleteJob (Job ID: ...*
+
+- Все 4 файла были удалены пакетно, последующие логи нам дают информацию, что файлов для удаления нет
