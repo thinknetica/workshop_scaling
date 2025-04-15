@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# rails r ./redis_listerner.rb
 
 Rails.logger.info 'Run Redis listener'
 
@@ -15,7 +16,7 @@ $redis.subscribe('think_tasks') do |on|
       klass, *args = message.split(':')
       payload[:job_class] = klass
       job_klass = klass.constantize
-      job_klass.perform_later(*args)
+      job_klass.perform_now#(*args)
     end
   rescue StandardError => e
     Rails.logger.error "Unable to process message[#{e.inspect}]: channel=#{channel} message=#{message.inspect}"
