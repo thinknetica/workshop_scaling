@@ -1,6 +1,7 @@
 require 'prometheus/client/data_stores/direct_file_store'
 
-$current_ip = ENV.fetch('CURRENT_IP', '172.22.1.11')
+# $current_ip = ENV.fetch('CURRENT_IP', '172.22.1.11')
+$current_ip = ENV.fetch('CURRENT_IP', '127.0.0.1')
 
 Diplomat.configure do |config|
   config.url = "http://#{$current_ip}:8500"

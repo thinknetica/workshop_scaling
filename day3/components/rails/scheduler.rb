@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# rails r ./scheduler.rb
 
 require 'rufus-scheduler'
 
@@ -63,6 +64,10 @@ scheduler.start do |s|
 
   s.every '10s' do
     TestSchedulerJob.perform_later(Time.now, 1.week.since)
+  end
+
+  s.every '10s' do
+    DataDeleteJob.perform_now
   end
 
   

@@ -273,6 +273,9 @@ GEM
       base64
       websocket-extensions (>= 0.1.0)
     websocket-extensions (0.1.5)
+    with_advisory_lock (5.1.0)
+      activerecord (>= 6.1)
+      zeitwerk (>= 2.6)
     zeitwerk (2.7.2)
 
 PLATFORMS
@@ -297,6 +300,7 @@ DEPENDENCIES
   sidekiq
   tzinfo-data
   webrick
+  with_advisory_lock
 
 BUNDLED WITH
    2.6.2
