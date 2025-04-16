@@ -66,7 +66,7 @@ scheduler.start do |s|
     TestSchedulerJob.perform_later(Time.now, 1.week.since)
   end
 
-  s.every '20s' do
+  s.every '10s' do
     DataDeleteJob.perform_now
   end
 

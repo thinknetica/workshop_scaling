@@ -10,7 +10,7 @@
 - Соответственно создал саму задачу DataHandlerJob по изменению состояния объектов на "ОБРАБОТАННЫЕ" (processed)
 
 ## Пункт 3.
-- Для проверки данного этапа стартую сервер и запускаю с POSTMAN запрос на адрес http://localhost:3000/data/input, с параметрами в теле запроса files = ["file_1", "file_2", "file_3", "file_3"] -> Создалось 4 объекта DataFile со статусом raw
+- Для проверки данного этапа стартую сервер и запускаю с POSTMAN запрос на адрес http://localhost:3000/data/input, с параметрами в теле запроса files = ["file_1", "file_2", "file_3", "file_4"] -> Создалось 4 объекта DataFile со статусом raw
 - Открываю дополнительные 2 вкладки и в одной запускаю Listener (rails r ./redis_listerner.rb), в другой Publisher (rails r publisher.rb)
 
 *[ActiveJob] [DataHandlerJob] [8b0fcba0-996c-4946-ae78-12797619588e] Processed 3 files*
@@ -34,3 +34,20 @@
 *[ActiveJob] [DataDeleteJob] [ef975175-a31b-4809-b715-2ed02fce92d7] Performed DataDeleteJob (Job ID: ...*
 
 - Все 4 файла были удалены пакетно, последующие логи нам дают информацию, что файлов для удаления нет
+
+## Метрики.
+- Создал свои метрики для подсчета НЕобработанных, обработанных и удаленных данных (raw_data_count, processed_data_count, deleted_data_count), пришлось переработать Jobs
+
+*# TYPE raw_data_count counter*
+*# HELP raw_data_count Total number of raw data_files*
+*raw_data_count 28.0*
+*# TYPE processed_data_count counter*
+*# HELP processed_data_count Total number of processed data_files*
+*processed_data_count 28.0*
+*# TYPE deleted_data_count counter*
+*# HELP deleted_data_count Total number of deleted data_files*
+*deleted_data_count{source="data_deleted"} 28.0*
+
+## Выводы:
+- Благодаря метрикам увидел нарастание обработанных данных и увеличил частоту удаления данных с 20 до 10 секунд
+- Разделил работу задачи на отдельные компоненты, контролируя процесс с помощью метрик
